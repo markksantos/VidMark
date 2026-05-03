@@ -21,6 +21,120 @@
   cursor: pointer;
   pointer-events: auto;
   transition: transform 80ms ease-out, background-color 80ms ease-out;
+  z-index: 2147483002;
+}
+
+/* Translucent overlay that highlights the loop range on the seek bar. */
+.gd-fio-loop-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: hsla(140, 70%, 55%, 0.28);
+  border-left: 2px solid hsla(140, 80%, 50%, 0.85);
+  border-right: 2px solid hsla(140, 80%, 50%, 0.85);
+  pointer-events: none;
+  z-index: 2147482999;
+}
+
+.gd-fio-active {
+  background: hsl(140, 70%, 50%) !important;
+  color: #0a3a18 !important;
+  border-color: hsl(140, 80%, 35%) !important;
+}
+
+/* Annotation overlay (draw mode) */
+.gd-fio-annotate-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2147483600;
+  pointer-events: auto;
+}
+
+.gd-fio-annotate-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.18);
+  touch-action: none;
+}
+
+.gd-fio-annotate-toolbar {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(32, 33, 36, 0.95);
+  color: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  font-family: 'Google Sans', Roboto, system-ui, sans-serif;
+  font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.gd-fio-annot-label {
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.gd-fio-annot-color {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.gd-fio-annot-color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.gd-fio-annot-swatch {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: #ff3838;
+}
+
+.gd-fio-annotate-toolbar button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8f9fa;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 80ms ease;
+}
+
+.gd-fio-annotate-toolbar button:hover { background: rgba(255, 255, 255, 0.16); }
+.gd-fio-annotate-toolbar button.primary {
+  background: hsl(210, 75%, 58%);
+  border-color: hsl(210, 75%, 50%);
+}
+.gd-fio-annotate-toolbar button.primary:hover { background: hsl(210, 80%, 64%); }
+
+/* Saved annotation rendered during playback */
+.gd-fio-annotation-display {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2147483500;
+  object-fit: contain;
 }
 
 .gd-fio-marker:hover {
@@ -179,18 +293,64 @@ body.gd-fio-video-expanded section[aria-label="Video Player"] iframe {
   font-family: 'Google Sans', Roboto, system-ui, sans-serif;
   font-size: 13px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 320px;
 }
 
 .gd-fio-panel-row {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.gd-fio-panel-row-2 .gd-fio-search {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8f9fa;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 5px 8px;
+  border-radius: 6px;
+  font: inherit;
+  outline: none;
+}
+
+.gd-fio-panel-row-2 .gd-fio-search::placeholder { color: rgba(255, 255, 255, 0.45); }
+.gd-fio-panel-row-2 .gd-fio-search:focus { border-color: hsla(210, 80%, 65%, 0.8); }
+
+.gd-fio-tag-select {
+  flex: 0 0 auto;
+  max-width: 130px;
+}
+
+.gd-fio-panel-row-3 {
+  gap: 8px;
+}
+
+.gd-fio-panel-row-3 .gd-fio-panel-btn {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.gd-fio-panel-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  flex: 1;
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gd-fio-panel-status[data-kind="active"] {
+  color: hsl(140, 70%, 65%);
 }
 
 .gd-fio-panel-label {

@@ -33,6 +33,12 @@ Built for editors, agencies, marketing teams, and anyone reviewing video files s
 - **Frame.io-style sorting** — Reorder Drive's comment list by Timecode, Oldest, Newest, Commenter, or filter to Completed (resolved). Same modes Frame.io reviewers expect.
 - **Hide / Show comments** — One-click toggle that closes the comments panel and expands the video player to fill the freed space (16:9, viewport-aware), then snaps back when you reopen them.
 - **Auto-reopen comment box** — After you click *Post Comment*, VidMark auto-clicks the *+ Comment* toolbar button so you can immediately type the next note without losing your place in the video.
+- **`#tags` color-code your timeline** — Drop `#fix #color #audio #approve` (or any hashtag) into a comment and the marker on the timeline switches to that tag's color. The floating panel gets a tag filter dropdown that filters both the comments list and the timeline.
+- **Search comments + filter the timeline** — Type into the search box and only matching comments + their markers stay visible. Press `/` from anywhere to focus the search.
+- **Loop between two markers** — Click *🔁 Loop* in the panel (or press `L`), pick two markers, and the video loops between them on repeat — perfect for tight editing review.
+- **Drawing / annotations** — *✏️ Annotate* pauses the video and overlays a canvas; draw on the frame with color + brush-size + undo, save, and the drawing re-displays whenever you scrub back to that moment. Saved locally per video, never transmitted.
+- **Side-by-side compare** — Compare two video versions side-by-side via the popup → *Side-by-side compare*. Paste two Drive video URLs and review v1 vs v2 in one tab.
+- **Keyboard shortcuts** — `n` new comment · `,` `.` previous / next marker · `/` focus search · `L` loop mode · `Cmd+E` open export · `Esc` close any open menu.
 - **Export to nine formats** — One-click export to `.txt`, Markdown, CSV, JSON, printable HTML (save as PDF), `.srt` / `.vtt` subtitles, **`.fcpxml`** for Final Cut Pro & Adobe Premiere, and **`.edl`** for DaVinci Resolve / Avid / any NLE.
 - **Toolbar popup menu** — Click the VidMark icon in your Chrome toolbar for quick access to every export format and a Settings panel that toggles each feature on or off (synced across browsers via your Google account).
 - **Folder-view support** — Works in Drive's standalone video viewer and in the video preview opened from inside a folder.
@@ -135,24 +141,27 @@ Drive's video is a YouTube iframe (cross-origin) but Drive renders its own seek 
 VidMark/
 ├── manifest.json          # MV3 manifest — content script + popup action + storage perm
 ├── content.js             # All in-page behavior — runs on drive.google.com
-│   ├── Settings + storage     # chrome.storage.sync load + onChanged listener
-│   ├── 1. Auto-stamp           # insertTimestamp + live updater
-│   ├── 2. Timestamps           # wrapAllTimestamps + clickable [m:ss] links
-│   ├── 3. Markers              # timeline overlay, hue assignment, click → seek
-│   ├── 4. Sort + Export        # sort modes, 9-format export pipeline
-│   ├── 5. Auto-reopen          # mutation-based detection, click + Comment
-│   ├── 6. Hide / expand        # comments panel toggle + video player resize
-│   └── Popup messaging         # VIDMARK_EXPORT / VIDMARK_SETTINGS_CHANGED handlers
-├── styles.css             # Markers, links, flash animation, sort layout, panel + dropdown
-├── popup.html             # Toolbar popup — Export | Settings | About tabs
-├── popup.css              # Popup styling
-├── popup.js               # Popup tab nav, export dispatch, settings persistence
+│   ├── Settings + storage      # chrome.storage.sync load + onChanged listener
+│   ├── 1. Auto-stamp            # insertTimestamp + live updater
+│   ├── 2. Timestamps            # wrapAllTimestamps + clickable [m:ss] + #tag parsing
+│   ├── 3. Markers               # timeline overlay, hue per timestamp + per tag
+│   ├── 4. Sort / Filter / Search # sort modes, tag filter, text search, 9-format export
+│   ├── 5. Loop between markers  # set-start / set-end / interval-driven re-seek
+│   ├── 6. Drawing / annotations # canvas overlay, save to chrome.storage.local
+│   ├── 7. Auto-reopen           # mutation-based detection, click + Comment
+│   ├── 8. Hide / expand         # comments panel toggle + video player resize
+│   ├── Keyboard shortcuts       # n / , . / / L / Cmd+E / Esc
+│   └── Popup messaging          # VIDMARK_EXPORT / VIDMARK_SETTINGS_CHANGED handlers
+├── styles.css             # Markers, flash, sort layout, panel + dropdown + annotation UI
+├── popup.html / popup.css / popup.js   # Toolbar popup — Export | Settings | About + Compare
+├── compare.html / compare.css / compare.js  # Side-by-side compare page (v1 vs v2)
 ├── icon-16.png            # Toolbar icon
 ├── icon-32.png            # Windows context menu
 ├── icon-48.png            # Extensions management page
 ├── icon-128.png           # Chrome Web Store listing
 ├── icon-source.png        # 1024×1024 master
 ├── store-listing.txt      # Copy-paste-ready Chrome Web Store fields
+├── PRIVACY.md             # Privacy policy (linked from manifest + Web Store)
 └── README.md
 ```
 

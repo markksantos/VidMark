@@ -18,6 +18,8 @@
     showMarkers: true,
     clickableTimestamps: true,
     showFloatingPanel: true,
+    keyboardShortcuts: true,
+    showAnnotations: true,
   };
 
   function loadSettings() {
@@ -48,6 +50,33 @@
   function hueForSeconds(sec) {
     const phi = 0.6180339887498949;
     return Math.floor(((sec * phi) % 1 + 1) % 1 * 360);
+  }
+
+  // Stable hue per #tag string. Uses a tiny string hash + golden ratio so
+  // similar tag names land on visibly different colors.
+  function hueForTag(tag) {
+    let h = 2166136261;
+    const s = String(tag).toLowerCase();
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const phi = 0.6180339887498949;
+    return Math.floor((((h >>> 0) / 4294967295) * phi % 1) * 360);
+  }
+
+  // Hashtags inside comment bodies. Matches things like #fix, #color-grade,
+  // #audio_2 — letters/digits/underscore/hyphen, must start with a letter.
+  const TAG_REGEX = /(^|\s)#([a-zA-Z][\w-]{0,31})\b/g;
+  function parseTags(text) {
+    if (!text) return [];
+    const found = new Set();
+    let m;
+    TAG_REGEX.lastIndex = 0;
+    while ((m = TAG_REGEX.exec(text)) !== null) {
+      found.add(m[2].toLowerCase());
+    }
+    return Array.from(found);
   }
 
   function parseAriaDuration(str) {
@@ -363,7 +392,7 @@
   }
 
   function buildStampIndex() {
-    // seconds -> { containers: Set<Element>, text: string }
+    // seconds -> { containers: Set<Element>, text: string, primaryTag: string|null }
     const index = new Map();
     document.querySelectorAll('.gd-fio-ts-link').forEach((span) => {
       const sec = parseInt(span.dataset.gdFioSec, 10);
@@ -371,12 +400,16 @@
       const container = findCommentContainer(span);
       let entry = index.get(sec);
       if (!entry) {
-        entry = { containers: new Set(), text: '' };
+        entry = { containers: new Set(), text: '', primaryTag: null };
         index.set(sec, entry);
       }
       if (container) entry.containers.add(container);
       if (!entry.text && container) {
         entry.text = (container.textContent || '').trim().slice(0, 140);
+      }
+      if (!entry.primaryTag && container) {
+        const tags = parseTags(container.textContent || '');
+        if (tags.length > 0) entry.primaryTag = tags[0];
       }
     });
     return index;
@@ -434,43 +467,439 @@
     const index = buildStampIndex();
 
     const layer = ensureMarkerLayer(track);
-    const wantKeys = new Set(Array.from(index.keys()).map(String));
+    const wantKeys = new Set();
+    for (const sec of index.keys()) {
+      if (visibleTsSet === null || visibleTsSet.has(sec)) {
+        wantKeys.add(String(sec));
+      }
+    }
 
     layer.querySelectorAll(`.${MARKER_CLASS}`).forEach((el) => {
       if (!wantKeys.has(el.dataset.sec)) el.remove();
     });
 
     for (const [seconds, entry] of index.entries()) {
+      // Skip filtered-out timestamps.
+      if (visibleTsSet !== null && !visibleTsSet.has(seconds)) continue;
+
       const key = String(seconds);
       let marker = layer.querySelector(`.${MARKER_CLASS}[data-sec="${key}"]`);
+      // When the comment has a tag, the tag's hue takes precedence over
+      // the timestamp-derived hue so #fix #color etc. color-code the bar.
+      const hue = entry.primaryTag ? hueForTag(entry.primaryTag) : hueForSeconds(seconds);
       if (!marker) {
         marker = document.createElement('div');
         marker.className = MARKER_CLASS;
         marker.dataset.sec = key;
-        marker.style.setProperty('--gd-fio-h', String(hueForSeconds(seconds)));
         marker.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          seekTo(seconds);
-          const fresh = buildStampIndex().get(seconds);
-          if (fresh) flashComments(fresh.containers, hueForSeconds(seconds));
+          handleMarkerClick(seconds, hue);
         });
         marker.addEventListener('pointerdown', (e) => e.stopPropagation());
         marker.addEventListener('mousedown', (e) => e.stopPropagation());
         layer.appendChild(marker);
       }
+      marker.style.setProperty('--gd-fio-h', String(hue));
+      marker.dataset.tag = entry.primaryTag || '';
       marker.style.left = `${(seconds / time.durationSec) * 100}%`;
-      marker.title = `Jump to ${fmt(seconds)} — ${entry.text}`;
+      const tagSuffix = entry.primaryTag ? ` · #${entry.primaryTag}` : '';
+      marker.title = `Jump to ${fmt(seconds)}${tagSuffix} — ${entry.text}`;
+    }
+  }
+
+  // Default marker click → seek + flash the matching comment(s). Loop mode
+  // overrides this when active.
+  function handleMarkerClick(seconds, hue) {
+    if (loopState.mode === 'set-start') {
+      loopState.start = seconds;
+      loopState.mode = 'set-end';
+      setPanelStatus(`Loop start: ${fmt(seconds)} — click another marker for end`);
+      updateLoopOverlay();
+      return;
+    }
+    if (loopState.mode === 'set-end') {
+      loopState.end = seconds;
+      if (loopState.end < loopState.start) {
+        const tmp = loopState.start; loopState.start = loopState.end; loopState.end = tmp;
+      }
+      activateLoop();
+      return;
+    }
+    seekTo(seconds);
+    const fresh = buildStampIndex().get(seconds);
+    if (fresh) flashComments(fresh.containers, hue);
+  }
+
+  // Loop and Annotate handlers — set below in their feature sections.
+  let toggleLoopMode = () => {};
+  let toggleAnnotateMode = () => {};
+  const loopState = { mode: 'idle', start: null, end: null, intervalId: null };
+  let activateLoop = () => {};
+  let updateLoopOverlay = () => {};
+
+  // ---------- 5. Loop between two markers ----------
+
+  toggleLoopMode = function () {
+    const btn = document.querySelector('#gd-fio-panel [data-action="loop"]');
+    if (loopState.mode === 'looping') {
+      // Cancel an active loop.
+      stopLoopInterval();
+      loopState.mode = 'idle';
+      loopState.start = null;
+      loopState.end = null;
+      setPanelStatus('');
+      if (btn) btn.classList.remove('gd-fio-active');
+      updateLoopOverlay();
+      return;
+    }
+    if (loopState.mode === 'set-start' || loopState.mode === 'set-end') {
+      loopState.mode = 'idle';
+      loopState.start = null;
+      loopState.end = null;
+      setPanelStatus('');
+      if (btn) btn.classList.remove('gd-fio-active');
+      updateLoopOverlay();
+      return;
+    }
+    // Enter set-start.
+    loopState.mode = 'set-start';
+    loopState.start = null;
+    loopState.end = null;
+    setPanelStatus('Click first marker for loop start', 'active');
+    if (btn) btn.classList.add('gd-fio-active');
+    updateLoopOverlay();
+  };
+
+  function stopLoopInterval() {
+    if (loopState.intervalId) {
+      clearInterval(loopState.intervalId);
+      loopState.intervalId = null;
+    }
+  }
+
+  activateLoop = function () {
+    if (loopState.start == null || loopState.end == null) return;
+    loopState.mode = 'looping';
+    setPanelStatus(`Loop ${fmt(loopState.start)} → ${fmt(loopState.end)} · L to clear`, 'active');
+    seekTo(loopState.start);
+    stopLoopInterval();
+    loopState.intervalId = setInterval(() => {
+      const time = getTime();
+      if (!time) return;
+      // 0.25s slack at the end so we catch the boundary even at higher rates.
+      if (time.currentSec >= loopState.end - 0.05 || time.currentSec < loopState.start - 1) {
+        seekTo(loopState.start);
+      }
+    }, 250);
+    updateLoopOverlay();
+  };
+
+  updateLoopOverlay = function () {
+    const track = getSeekTrack();
+    if (!track) return;
+    let overlay = track.querySelector('.gd-fio-loop-overlay');
+    const time = getTime();
+    if (loopState.start == null || loopState.end == null || !time || !time.durationSec) {
+      if (overlay) overlay.remove();
+      return;
+    }
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'gd-fio-loop-overlay';
+      track.appendChild(overlay);
+    }
+    const left = Math.max(0, (loopState.start / time.durationSec) * 100);
+    const right = Math.min(100, (loopState.end / time.durationSec) * 100);
+    overlay.style.left = `${left}%`;
+    overlay.style.width = `${Math.max(0, right - left)}%`;
+  };
+
+  // ---------- 6. Drawing / annotation overlays ----------
+
+  function getFileId() {
+    const m = location.href.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  }
+
+  function getPlayerWrapper() {
+    return document.querySelector('.xpiQs');
+  }
+
+  function annotKey(fileId, seconds) {
+    return `vidmark:annot:${fileId}:${Math.round(seconds * 100)}`;
+  }
+
+  async function saveAnnotation(seconds, dataUrl) {
+    const fileId = getFileId();
+    if (!fileId || !chrome || !chrome.storage || !chrome.storage.local) return;
+    return new Promise((resolve) => {
+      chrome.storage.local.set({
+        [annotKey(fileId, seconds)]: { fileId, seconds, dataUrl, savedAt: Date.now() },
+      }, resolve);
+    });
+  }
+
+  function loadAnnotationsForFile() {
+    const fileId = getFileId();
+    if (!fileId || !chrome || !chrome.storage || !chrome.storage.local) {
+      cachedAnnotations = [];
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      chrome.storage.local.get(null, (all) => {
+        cachedAnnotations = Object.values(all || {}).filter((v) => v && v.fileId === fileId);
+        resolve();
+      });
+    });
+  }
+
+  let cachedAnnotations = [];
+  loadAnnotationsForFile();
+  if (chrome && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((_changes, area) => {
+      if (area === 'local') loadAnnotationsForFile();
+    });
+  }
+
+  let annotateOverlayEl = null;
+  let annotationDisplayEl = null;
+
+  toggleAnnotateMode = function () {
+    if (annotateOverlayEl) {
+      closeAnnotateOverlay();
+    } else {
+      openAnnotateOverlay();
+    }
+  };
+
+  // Make the function accessible to closeAnyMenus().
+  function closeAnnotateOverlay() {
+    if (annotateOverlayEl) {
+      annotateOverlayEl.remove();
+      annotateOverlayEl = null;
+    }
+    const btn = document.querySelector('#gd-fio-panel [data-action="annotate"]');
+    if (btn) btn.classList.remove('gd-fio-active');
+  }
+
+  function openAnnotateOverlay() {
+    const player = getPlayerWrapper();
+    const time = getTime();
+    if (!player || !time) {
+      setPanelStatus('Open a video to annotate', 'active');
+      setTimeout(() => setPanelStatus(''), 1800);
+      return;
+    }
+    // Pause via the play/pause button if currently playing.
+    const pauseBtn = document.querySelector('[role="button"][aria-label^="Pause"], button[aria-label^="Pause"]');
+    if (pauseBtn) clickLikeUser(pauseBtn);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'gd-fio-annotate-overlay';
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'gd-fio-annotate-canvas';
+    overlay.appendChild(canvas);
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'gd-fio-annotate-toolbar';
+    toolbar.innerHTML = `
+      <span class="gd-fio-annot-label">Annotating ${fmt(time.currentSec)}</span>
+      <label class="gd-fio-annot-color">
+        <span class="gd-fio-annot-swatch"></span>
+        <input type="color" data-action="color" value="#ff3838">
+      </label>
+      <button type="button" data-action="size">●</button>
+      <button type="button" data-action="undo">Undo</button>
+      <button type="button" data-action="clear">Clear</button>
+      <button type="button" data-action="cancel">Cancel</button>
+      <button type="button" data-action="save" class="primary">Save</button>
+    `;
+    overlay.appendChild(toolbar);
+
+    const cs = getComputedStyle(player);
+    if (cs.position === 'static') player.style.position = 'relative';
+    player.appendChild(overlay);
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      redraw();
+    }
+
+    let color = '#ff3838';
+    let lineWidth = 4;
+    let drawing = false;
+    const strokes = [];
+    let currentStroke = [];
+    const ctx = canvas.getContext('2d');
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+
+    function redraw() {
+      const w = canvas.width / (window.devicePixelRatio || 1);
+      const h = canvas.height / (window.devicePixelRatio || 1);
+      ctx.clearRect(0, 0, w, h);
+      for (const s of strokes) {
+        if (s.length < 1) continue;
+        ctx.strokeStyle = s[0].color;
+        ctx.lineWidth = s[0].lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(s[0].x, s[0].y);
+        for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
+        ctx.stroke();
+      }
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      drawing = true;
+      const p = pos(e);
+      currentStroke = [{ x: p.x, y: p.y, color, lineWidth }];
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drawing) return;
+      const p = pos(e);
+      currentStroke.push({ x: p.x, y: p.y, color, lineWidth });
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (!drawing) return;
+      drawing = false;
+      if (currentStroke.length > 0) {
+        strokes.push(currentStroke);
+        currentStroke = [];
+      }
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    });
+    canvas.addEventListener('pointercancel', () => { drawing = false; currentStroke = []; });
+
+    const swatch = toolbar.querySelector('.gd-fio-annot-swatch');
+    swatch.style.background = color;
+    toolbar.querySelector('[data-action="color"]').addEventListener('input', (e) => {
+      color = e.target.value;
+      swatch.style.background = color;
+    });
+    toolbar.querySelector('[data-action="size"]').addEventListener('click', (e) => {
+      const sizes = [2, 4, 8, 14];
+      lineWidth = sizes[(sizes.indexOf(lineWidth) + 1) % sizes.length];
+      e.target.style.fontSize = `${10 + lineWidth}px`;
+    });
+    toolbar.querySelector('[data-action="undo"]').addEventListener('click', () => {
+      strokes.pop();
+      redraw();
+    });
+    toolbar.querySelector('[data-action="clear"]').addEventListener('click', () => {
+      strokes.length = 0;
+      redraw();
+    });
+    toolbar.querySelector('[data-action="cancel"]').addEventListener('click', closeAnnotateOverlay);
+    toolbar.querySelector('[data-action="save"]').addEventListener('click', async () => {
+      if (strokes.length === 0) {
+        closeAnnotateOverlay();
+        return;
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+      const t = getTime();
+      const sec = t ? t.currentSec : time.currentSec;
+      await saveAnnotation(sec, dataUrl);
+      setPanelStatus(`Annotation saved at ${fmt(sec)}`, 'active');
+      setTimeout(() => setPanelStatus(''), 2200);
+      closeAnnotateOverlay();
+    });
+
+    annotateOverlayEl = overlay;
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const btn = document.querySelector('#gd-fio-panel [data-action="annotate"]');
+    if (btn) btn.classList.add('gd-fio-active');
+  }
+
+  function tickAnnotationDisplay() {
+    if (!settings.showAnnotations || annotateOverlayEl) {
+      if (annotationDisplayEl) {
+        annotationDisplayEl.remove();
+        annotationDisplayEl = null;
+      }
+      return;
+    }
+    const time = getTime();
+    if (!time) return;
+    const match = cachedAnnotations.find((a) => Math.abs(a.seconds - time.currentSec) < 0.5);
+    if (!match) {
+      if (annotationDisplayEl) {
+        annotationDisplayEl.remove();
+        annotationDisplayEl = null;
+      }
+      return;
+    }
+    const player = getPlayerWrapper();
+    if (!player) return;
+    if (!annotationDisplayEl || !player.contains(annotationDisplayEl)) {
+      annotationDisplayEl = document.createElement('img');
+      annotationDisplayEl.className = 'gd-fio-annotation-display';
+      annotationDisplayEl.alt = '';
+      const cs = getComputedStyle(player);
+      if (cs.position === 'static') player.style.position = 'relative';
+      player.appendChild(annotationDisplayEl);
+    }
+    const key = `${match.seconds}:${match.savedAt}`;
+    if (annotationDisplayEl.dataset.key !== key) {
+      annotationDisplayEl.src = match.dataUrl;
+      annotationDisplayEl.dataset.key = key;
     }
   }
 
   // ---------- 3. Sort + export panel ----------
 
   let currentSort = 'timecode';
+  let currentTagFilter = '';
+  let currentSearch = '';
+  let visibleTsSet = null; // null = no filter; Set<number> = only these seconds
   let listParent = null;
   let lastItemCount = -1;
   let lastSortKey = '';
   let lastTsLinkCount = -1;
+
+  function collectAllTags() {
+    const tags = new Set();
+    document.querySelectorAll('[role="listitem"]').forEach((el) => {
+      const text = el.textContent || '';
+      for (const t of parseTags(text)) tags.add(t);
+    });
+    return Array.from(tags).sort();
+  }
+
+  function commentMatchesFilters(meta) {
+    if (currentTagFilter) {
+      if (!meta.tags || !meta.tags.includes(currentTagFilter)) return false;
+    }
+    if (currentSearch) {
+      const q = currentSearch.toLowerCase();
+      const hay = `${meta.body || ''} ${meta.author || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
 
   function findListParent() {
     if (listParent && document.contains(listParent)) return listParent;
@@ -584,7 +1013,10 @@
     // Resolved — Drive shows a "Reopen discussion" button on resolved comments.
     const resolved = !!el.querySelector('[aria-label*="Reopen" i], [data-tooltip*="Reopen" i]');
 
-    return { author, seconds, body, resolved };
+    // #tags from the comment body (e.g. #fix #color #audio).
+    const tags = parseTags(body);
+
+    return { author, seconds, body, resolved, tags };
   }
 
   function applySort(force) {
@@ -594,8 +1026,10 @@
     if (items.length === 0) return;
 
     const tsLinkCount = document.querySelectorAll('.gd-fio-ts-link').length;
-    if (!force && currentSort === lastSortKey && items.length === lastItemCount && tsLinkCount === lastTsLinkCount) return;
-    lastSortKey = currentSort;
+    // Filter state is part of the sort key so re-applying picks up changes.
+    const filterKey = `${currentSort}|${currentTagFilter}|${currentSearch}`;
+    if (!force && filterKey === lastSortKey && items.length === lastItemCount && tsLinkCount === lastTsLinkCount) return;
+    lastSortKey = filterKey;
     lastItemCount = items.length;
     lastTsLinkCount = tsLinkCount;
 
@@ -621,8 +1055,12 @@
       return { el, origIdx: parseInt(el.dataset.gdFioOrigIdx, 10) || 0, ...meta };
     });
 
-    let visible = data.slice();
-    let hidden = [];
+    // Apply tag filter + search before sort: filtered-out comments are hidden
+    // entirely, and their timeline markers are also hidden via visibleTsSet.
+    const filterActive = currentTagFilter !== '' || currentSearch !== '';
+    const passes = (d) => commentMatchesFilters(d);
+    let visible = filterActive ? data.filter(passes) : data.slice();
+    let hidden = filterActive ? data.filter((d) => !passes(d)) : [];
 
     if (currentSort === 'timecode') {
       visible.sort((a, b) => {
@@ -641,9 +1079,9 @@
         return cmp !== 0 ? cmp : a.origIdx - b.origIdx;
       });
     } else if (currentSort === 'completed') {
-      visible = data.filter((d) => d.resolved);
-      hidden = data.filter((d) => !d.resolved);
-      visible.sort((a, b) => a.origIdx - b.origIdx);
+      const onlyResolved = visible.filter((d) => d.resolved);
+      hidden = hidden.concat(visible.filter((d) => !d.resolved));
+      visible = onlyResolved.sort((a, b) => a.origIdx - b.origIdx);
     }
 
     visible.forEach((d, i) => {
@@ -651,6 +1089,15 @@
       d.el.style.display = '';
     });
     hidden.forEach((d) => { d.el.style.display = 'none'; });
+
+    // Build the set of seconds whose markers should remain visible. null when
+    // no filter is active so markers all show by default.
+    if (filterActive || currentSort === 'completed') {
+      visibleTsSet = new Set();
+      for (const d of visible) if (d.seconds !== null) visibleTsSet.add(d.seconds);
+    } else {
+      visibleTsSet = null;
+    }
   }
 
   // ---------- Export pipeline ----------
@@ -1035,24 +1482,35 @@ ${rows}
           <option value="commenter">Commenter</option>
           <option value="completed">Completed</option>
         </select>
-      </div>
-      <button type="button" class="gd-fio-panel-btn gd-fio-panel-btn-secondary" data-action="toggle-hide">Hide Comments</button>
-      <div class="gd-fio-export-wrap">
-        <button type="button" class="gd-fio-panel-btn" data-action="export-toggle">Export <span class="gd-fio-caret">▾</span></button>
-        <div class="gd-fio-export-menu" data-action="export-menu" hidden>
-          <div class="gd-fio-menu-section">Document</div>
-          <button type="button" data-format="txt"><span>Plain text</span><span class="ext">.txt</span></button>
-          <button type="button" data-format="md"><span>Markdown</span><span class="ext">.md</span></button>
-          <button type="button" data-format="csv"><span>Spreadsheet</span><span class="ext">.csv</span></button>
-          <button type="button" data-format="json"><span>JSON</span><span class="ext">.json</span></button>
-          <button type="button" data-format="html"><span>Printable / PDF</span><span class="ext">.html</span></button>
-          <div class="gd-fio-menu-section">Subtitles</div>
-          <button type="button" data-format="srt"><span>SubRip</span><span class="ext">.srt</span></button>
-          <button type="button" data-format="vtt"><span>WebVTT</span><span class="ext">.vtt</span></button>
-          <div class="gd-fio-menu-section">Video editor</div>
-          <button type="button" data-format="fcpxml"><span>Final Cut / Premiere</span><span class="ext">.fcpxml</span></button>
-          <button type="button" data-format="edl"><span>DaVinci Resolve / EDL</span><span class="ext">.edl</span></button>
+        <button type="button" class="gd-fio-panel-btn gd-fio-panel-btn-secondary" data-action="toggle-hide">Hide Comments</button>
+        <div class="gd-fio-export-wrap">
+          <button type="button" class="gd-fio-panel-btn" data-action="export-toggle">Export <span class="gd-fio-caret">▾</span></button>
+          <div class="gd-fio-export-menu" data-action="export-menu" hidden>
+            <div class="gd-fio-menu-section">Document</div>
+            <button type="button" data-format="txt"><span>Plain text</span><span class="ext">.txt</span></button>
+            <button type="button" data-format="md"><span>Markdown</span><span class="ext">.md</span></button>
+            <button type="button" data-format="csv"><span>Spreadsheet</span><span class="ext">.csv</span></button>
+            <button type="button" data-format="json"><span>JSON</span><span class="ext">.json</span></button>
+            <button type="button" data-format="html"><span>Printable / PDF</span><span class="ext">.html</span></button>
+            <div class="gd-fio-menu-section">Subtitles</div>
+            <button type="button" data-format="srt"><span>SubRip</span><span class="ext">.srt</span></button>
+            <button type="button" data-format="vtt"><span>WebVTT</span><span class="ext">.vtt</span></button>
+            <div class="gd-fio-menu-section">Video editor</div>
+            <button type="button" data-format="fcpxml"><span>Final Cut / Premiere</span><span class="ext">.fcpxml</span></button>
+            <button type="button" data-format="edl"><span>DaVinci Resolve / EDL</span><span class="ext">.edl</span></button>
+          </div>
         </div>
+      </div>
+      <div class="gd-fio-panel-row gd-fio-panel-row-2">
+        <input type="search" class="gd-fio-search" placeholder="Search comments… (/)" data-action="search" autocomplete="off">
+        <select class="gd-fio-panel-select gd-fio-tag-select" data-action="tag-filter" title="Filter by #tag">
+          <option value="">All tags</option>
+        </select>
+      </div>
+      <div class="gd-fio-panel-row gd-fio-panel-row-3">
+        <button type="button" class="gd-fio-panel-btn gd-fio-panel-btn-secondary" data-action="loop">🔁 Loop</button>
+        <button type="button" class="gd-fio-panel-btn gd-fio-panel-btn-secondary" data-action="annotate">✏️ Annotate</button>
+        <span class="gd-fio-panel-status" data-action="status"></span>
       </div>
     `;
     document.body.appendChild(wrap);
@@ -1083,6 +1541,76 @@ ${rows}
     document.addEventListener('click', (e) => {
       if (!exportMenu.hidden && !wrap.contains(e.target)) exportMenu.hidden = true;
     });
+
+    // ---------- Search input ----------
+    const searchInput = wrap.querySelector('[data-action="search"]');
+    let searchDebounce = null;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        currentSearch = searchInput.value.trim();
+        applySort(true);
+        scheduleRender();
+      }, 120);
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        currentSearch = '';
+        applySort(true);
+        scheduleRender();
+        searchInput.blur();
+      }
+    });
+
+    // ---------- Tag filter dropdown ----------
+    const tagSelect = wrap.querySelector('[data-action="tag-filter"]');
+    tagSelect.addEventListener('change', () => {
+      currentTagFilter = tagSelect.value;
+      applySort(true);
+      scheduleRender();
+    });
+
+    // ---------- Loop button ----------
+    wrap.querySelector('[data-action="loop"]').addEventListener('click', toggleLoopMode);
+
+    // ---------- Annotate button ----------
+    wrap.querySelector('[data-action="annotate"]').addEventListener('click', toggleAnnotateMode);
+  }
+
+  function refreshTagFilter() {
+    const select = document.querySelector('#gd-fio-panel [data-action="tag-filter"]');
+    if (!select) return;
+    const tags = collectAllTags();
+    const current = select.value;
+    const desiredTagSet = new Set(tags);
+    const existingTagSet = new Set(
+      Array.from(select.options).map((o) => o.value).filter((v) => v !== '')
+    );
+    let changed = tags.length !== existingTagSet.size;
+    if (!changed) {
+      for (const t of tags) if (!existingTagSet.has(t)) { changed = true; break; }
+    }
+    if (!changed) return;
+    select.innerHTML = '<option value="">All tags</option>';
+    for (const tag of tags) {
+      const opt = document.createElement('option');
+      opt.value = tag;
+      opt.textContent = `#${tag}`;
+      select.appendChild(opt);
+    }
+    select.value = desiredTagSet.has(current) ? current : '';
+    if (select.value !== currentTagFilter) {
+      currentTagFilter = select.value;
+      applySort(true);
+    }
+  }
+
+  function setPanelStatus(message, kind) {
+    const el = document.querySelector('#gd-fio-panel [data-action="status"]');
+    if (!el) return;
+    el.textContent = message || '';
+    el.dataset.kind = kind || '';
   }
 
   function tickPanel() {
@@ -1105,6 +1633,7 @@ ${rows}
     if (!panel) { buildPanel(); panel = document.getElementById('gd-fio-panel'); }
     if (panel) panel.style.display = '';
     if (items.length > 0) applySort(false);
+    refreshTagFilter();
 
     // Fallback: if Drive's toggle wasn't found and we're hiding via listitem class,
     // keep that class applied across re-renders.
@@ -1328,12 +1857,129 @@ ${rows}
       try { renderMarkers(); } catch (e) { console.warn(`${TAG} render error`, e); }
       try { tickPanel(); } catch (e) { console.warn(`${TAG} panel error`, e); }
       try { tickAutoReopen(); } catch (e) { console.warn(`${TAG} auto-reopen tick error`, e); }
+      try { tickAnnotationDisplay(); } catch (e) { console.warn(`${TAG} annotation tick error`, e); }
     });
   }
 
   setInterval(scheduleRender, 1500);
   window.addEventListener('resize', scheduleRender);
   setTimeout(scheduleRender, 800);
+
+  // ---------- Keyboard shortcuts ----------
+
+  function isInEditable(target) {
+    if (!target) return false;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return true;
+    let el = target;
+    while (el) {
+      if (el.isContentEditable) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
+
+  function jumpToMarker(direction) {
+    const time = getTime();
+    if (!time) return;
+    const all = Array.from(buildStampIndex().keys())
+      .filter((s) => typeof s === 'number' && isFinite(s))
+      .sort((a, b) => a - b);
+    if (all.length === 0) return;
+    const current = time.currentSec;
+    let target;
+    if (direction > 0) {
+      target = all.find((s) => s > current + 0.5);
+      if (target === undefined) target = all[0];
+    } else {
+      const reversed = all.slice().reverse();
+      target = reversed.find((s) => s < current - 0.5);
+      if (target === undefined) target = all[all.length - 1];
+    }
+    seekTo(target);
+    const entry = buildStampIndex().get(target);
+    if (entry) {
+      const hue = entry.primaryTag ? hueForTag(entry.primaryTag) : hueForSeconds(target);
+      flashComments(entry.containers, hue);
+    }
+  }
+
+  function closeAnyMenus() {
+    const exportMenu = document.querySelector('#gd-fio-panel [data-action="export-menu"]');
+    if (exportMenu) exportMenu.hidden = true;
+    if (loopState.mode === 'set-start' || loopState.mode === 'set-end') {
+      loopState.mode = 'idle';
+      loopState.start = null;
+      loopState.end = null;
+      setPanelStatus('Loop canceled');
+      setTimeout(() => setPanelStatus(''), 1500);
+      updateLoopOverlay();
+    }
+    if (typeof closeAnnotateOverlay === 'function') closeAnnotateOverlay();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (!settings.keyboardShortcuts) return;
+
+    // Escape always works — closes menus, cancels modes.
+    if (e.key === 'Escape') {
+      closeAnyMenus();
+      return;
+    }
+
+    // Slash focuses the search input from anywhere.
+    if (e.key === '/' && !isInEditable(e.target)) {
+      const search = document.querySelector('#gd-fio-panel [data-action="search"]');
+      if (search) {
+        e.preventDefault();
+        search.focus();
+        search.select();
+      }
+      return;
+    }
+
+    if (isInEditable(e.target)) return;
+
+    // n — open a new comment at the current frame.
+    if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const btn = findAddCommentButton();
+      if (btn) {
+        e.preventDefault();
+        clickLikeUser(btn);
+      }
+      return;
+    }
+
+    // . — next marker
+    if (e.key === '.' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      jumpToMarker(1);
+      return;
+    }
+
+    // , — previous marker
+    if (e.key === ',' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      jumpToMarker(-1);
+      return;
+    }
+
+    // Cmd+E / Ctrl+E — open the floating panel's export dropdown.
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E')) {
+      const exportMenu = document.querySelector('#gd-fio-panel [data-action="export-menu"]');
+      if (exportMenu) {
+        e.preventDefault();
+        exportMenu.hidden = false;
+      }
+      return;
+    }
+
+    // l — toggle loop-set mode
+    if ((e.key === 'l' || e.key === 'L') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      toggleLoopMode();
+      return;
+    }
+  }, true);
 
   // ---------- Popup messaging ----------
 

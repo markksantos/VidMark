@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VidMark — Compare videos</title>
+  <link rel="stylesheet" href="compare.css">
+</head>
+<body>
+  <header class="topbar">
+    <img src="icon-48.png" class="logo" alt="">
+    <div class="title">
+      <div class="brand">VidMark Compare</div>
+      <div class="subtitle">Side-by-side review for two Drive videos</div>
+    </div>
+    <a href="https://github.com/markksantos/VidMark" target="_blank" class="ghlink">Help</a>
+  </header>
+
+  <section class="form" id="urlForm">
+    <div class="form-row">
+      <label>
+        <span>Left video — Drive URL or file ID</span>
+        <input type="text" id="leftUrl" placeholder="https://drive.google.com/file/d/&lt;FILE_ID&gt;/view" autocomplete="off">
+      </label>
+      <label>
+        <span>Right video — Drive URL or file ID</span>
+        <input type="text" id="rightUrl" placeholder="https://drive.google.com/file/d/&lt;FILE_ID&gt;/view" autocomplete="off">
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="button" id="loadBtn" class="primary">Load both videos</button>
+      <button type="button" id="swapBtn">Swap</button>
+      <button type="button" id="clearBtn">Clear</button>
+    </div>
+    <p class="form-hint">
+      Tip: open a Drive video in another tab and copy the URL — VidMark will pull
+      out the file ID automatically. Both videos must be shared so the embed
+      preview can load. Drive's preview iframe doesn't expose play controls
+      cross-origin, so playback is started independently per side. Use the
+      shared scrub bar below for visual sync.
+    </p>
+  </section>
+
+  <main class="players" id="players" hidden>
+    <div class="player-pane" data-side="left">
+      <div class="player-header">
+        <span class="player-label">Left</span>
+        <span class="player-id" id="leftLabel"></span>
+      </div>
+      <iframe id="leftFrame" allow="autoplay; fullscreen" allowfullscreen></iframe>
+    </div>
+    <div class="player-pane" data-side="right">
+      <div class="player-header">
+        <span class="player-label">Right</span>
+        <span class="player-id" id="rightLabel"></span>
+      </div>
+      <iframe id="rightFrame" allow="autoplay; fullscreen" allowfullscreen></iframe>
+    </div>
+  </main>
+
+  <p class="footer">VidMark — MIT © 2026 Mark Santos · <a href="https://github.com/markksantos/VidMark" target="_blank">GitHub</a></p>
+
+  <script src="compare.js"></script>
+</body>
+</html>

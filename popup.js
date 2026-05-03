@@ -5,6 +5,8 @@ const SETTINGS_KEYS = [
   'showMarkers',
   'clickableTimestamps',
   'showFloatingPanel',
+  'keyboardShortcuts',
+  'showAnnotations',
 ];
 
 // All settings default to true (opt-out model).
@@ -87,6 +89,15 @@ document.querySelectorAll('[data-setting]').forEach((input) => {
     }
   });
 });
+
+// ---------- Side-by-side compare ----------
+const compareBtn = document.querySelector('[data-action="open-compare"]');
+if (compareBtn) {
+  compareBtn.addEventListener('click', async () => {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('compare.html') });
+    window.close();
+  });
+}
 
 // ---------- About ----------
 const aboutVersionEl = document.getElementById('aboutVersion');
