@@ -902,7 +902,13 @@
   }
 
   function findListParent() {
-    if (listParent && document.contains(listParent)) return listParent;
+    // Cache hit only if the cached parent still contains listitems.
+    // Folder-view previews keep stale containers around when navigating
+    // between videos.
+    if (listParent && document.contains(listParent) && listParent.querySelector('[role="listitem"]')) {
+      return listParent;
+    }
+    listParent = null;
 
     // Prefer a list inside the comments dialog (avoids matching the file
     // grid in folder views, which also uses [role="list"]).
@@ -1089,6 +1095,16 @@
       d.el.style.display = '';
     });
     hidden.forEach((d) => { d.el.style.display = 'none'; });
+
+    // Defensive: also physically reorder the listitems in the DOM. Drive's
+    // folder-view preview sometimes keeps absolute positioning that we can't
+    // fully override with CSS, so flex `order` alone has no visible effect.
+    // Appending each in sort order moves them visually regardless of layout.
+    try {
+      for (const d of visible) {
+        if (d.el.parentElement === parent) parent.appendChild(d.el);
+      }
+    } catch (_) {}
 
     // Build the set of seconds whose markers should remain visible. null when
     // no filter is active so markers all show by default.
@@ -1451,6 +1467,29 @@ ${rows}
     if (parent) parent.classList.toggle('gd-fio-comments-hidden', hidden);
     const dialog = getCommentsDialog();
     if (dialog) dialog.style.display = hidden ? 'none' : '';
+
+    // Defensive sweep: directly toggle every comment-shaped listitem on the
+    // page. Folder-view previews render comments through a different DOM
+    // tree that the dialog selector can miss, so we also key off the
+    // listitem itself (must look like a comment — has [data-name] author,
+    // a wrapped ts-link, or aria-label mentioning "comment").
+    document.querySelectorAll('[role="listitem"]').forEach((el) => {
+      const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+      const looksLikeComment = !!(
+        el.querySelector('[data-name]') ||
+        el.querySelector('.gd-fio-ts-link') ||
+        ariaLabel.includes('comment') ||
+        ariaLabel.includes('author')
+      );
+      if (!looksLikeComment) return;
+      if (hidden) {
+        el.dataset.gdFioWasHidden = '1';
+        el.style.setProperty('display', 'none', 'important');
+      } else if (el.dataset.gdFioWasHidden === '1') {
+        el.style.removeProperty('display');
+        delete el.dataset.gdFioWasHidden;
+      }
+    });
 
     document.body.classList.toggle('gd-fio-video-expanded', hidden);
     if (hidden) computeExpandedPlayerVars();
