@@ -17,6 +17,14 @@
 
 ---
 
+<div align="center">
+
+![VidMark — add timestamps to Google Drive videos](screenshot.jpg)
+
+</div>
+
+---
+
 VidMark turns the Google Drive video player into a real video-review tool. Open a comment while paused and the current timestamp is auto-stamped at the start. Each timestamped comment drops a clickable color-coded circle on the timeline. Click a marker to jump the video and flash the matching comment. Sort comments by timecode, commenter, or completion. Export the whole feedback session to a clean text file with one click.
 
 Built for editors, agencies, marketing teams, and anyone reviewing video files shared over Drive — without paying for, syncing to, or uploading to Frame.io.
