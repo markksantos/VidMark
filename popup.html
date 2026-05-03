@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VidMark</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="header">
+    <img src="icon-48.png" class="logo" alt="">
+    <div>
+      <div class="brand">VidMark</div>
+      <div class="version">Video Timestamps for Google Drive</div>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="export" role="tab">Export</button>
+    <button class="tab" data-tab="settings" role="tab">Settings</button>
+    <button class="tab" data-tab="about" role="tab">About</button>
+  </nav>
+
+  <div class="status" id="status" hidden></div>
+
+  <section class="tab-panel" data-panel="export">
+    <div class="section-label">Document</div>
+    <button class="export-row" data-format="txt">
+      <span class="format-name">Plain text</span>
+      <span class="format-ext">.txt</span>
+    </button>
+    <button class="export-row" data-format="md">
+      <span class="format-name">Markdown</span>
+      <span class="format-ext">.md</span>
+    </button>
+    <button class="export-row" data-format="csv">
+      <span class="format-name">Spreadsheet (CSV)</span>
+      <span class="format-ext">.csv</span>
+    </button>
+    <button class="export-row" data-format="json">
+      <span class="format-name">JSON</span>
+      <span class="format-ext">.json</span>
+    </button>
+    <button class="export-row" data-format="html">
+      <span class="format-name">Printable / Save as PDF</span>
+      <span class="format-ext">.html</span>
+    </button>
+
+    <div class="section-label">Subtitles</div>
+    <button class="export-row" data-format="srt">
+      <span class="format-name">SubRip</span>
+      <span class="format-ext">.srt</span>
+    </button>
+    <button class="export-row" data-format="vtt">
+      <span class="format-name">WebVTT</span>
+      <span class="format-ext">.vtt</span>
+    </button>
+
+    <div class="section-label">Video editor</div>
+    <button class="export-row" data-format="fcpxml">
+      <span class="format-name">Final Cut Pro / Premiere</span>
+      <span class="format-ext">.fcpxml</span>
+    </button>
+    <button class="export-row" data-format="edl">
+      <span class="format-name">DaVinci Resolve / EDL</span>
+      <span class="format-ext">.edl</span>
+    </button>
+  </section>
+
+  <section class="tab-panel" data-panel="settings" hidden>
+    <label class="setting-row">
+      <div class="setting-text">
+        <div class="setting-name">Auto-stamp new comments</div>
+        <div class="setting-desc">Pre-fills [m:ss] when you open a new comment</div>
+      </div>
+      <input type="checkbox" data-setting="autoStamp">
+    </label>
+    <label class="setting-row">
+      <div class="setting-text">
+        <div class="setting-name">Live-update timestamp</div>
+        <div class="setting-desc">Re-writes the inserted [m:ss] as you scrub the video, until you start typing</div>
+      </div>
+      <input type="checkbox" data-setting="liveUpdate">
+    </label>
+    <label class="setting-row">
+      <div class="setting-text">
+        <div class="setting-name">Auto-reopen comment box</div>
+        <div class="setting-desc">Clicks "+ Comment" automatically after each post</div>
+      </div>
+      <input type="checkbox" data-setting="autoReopen">
+    </label>
+    <label class="setting-row">
+      <div class="setting-text">
+        <div class="setting-name">Show timeline markers</div>
+        <div class="setting-desc">Color-coded circles on the seek bar for each comment</div>
+      </div>
+      <input type="checkbox" data-setting="showMarkers">
+    </label>
+    <label class="setting-row">
+      <div class="setting-text">
+        <div class="setting-name">Clickable [m:ss] in comments</div>
+        <div class="setting-desc">Wrap timestamps in comment text as seek-on-click links</div>
+      </div>
+      <input type="checkbox" data-setting="clickableTimestamps">
+    </label>
+    <label class="setting-row">
+      <div class="setting-text">
+        <div class="setting-name">Show floating Sort/Export panel</div>
+        <div class="setting-desc">Top-right widget on the Drive video page</div>
+      </div>
+      <input type="checkbox" data-setting="showFloatingPanel">
+    </label>
+  </section>
+
+  <section class="tab-panel" data-panel="about" hidden>
+    <p class="about-blurb">
+      Frame.io-style video review for Google Drive. Auto-timestamp comments,
+      clickable timeline markers, sort by timecode, export to nine formats
+      including FCPXML for Final Cut/Premiere and EDL for DaVinci Resolve.
+    </p>
+    <ul class="about-links">
+      <li><a href="https://github.com/markksantos/VidMark" target="_blank">Source code on GitHub</a></li>
+      <li><a href="https://github.com/markksantos/VidMark/issues" target="_blank">Report a bug or request a feature</a></li>
+      <li><a href="https://github.com/markksantos/VidMark#readme" target="_blank">Documentation</a></li>
+    </ul>
+    <p class="about-version" id="aboutVersion">VidMark</p>
+    <p class="footer">MIT License · Built by Mark Santos</p>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

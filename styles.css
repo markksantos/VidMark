@@ -255,3 +255,74 @@ body.gd-fio-video-expanded section[aria-label="Video Player"] iframe {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.3);
 }
+
+/* Export dropdown */
+.gd-fio-export-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.gd-fio-caret {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.gd-fio-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: rgba(32, 33, 36, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.gd-fio-export-menu[hidden] {
+  display: none;
+}
+
+.gd-fio-menu-section {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 6px 10px 2px;
+}
+
+.gd-fio-export-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  color: #f8f9fa;
+  border: none;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 60ms ease;
+}
+
+.gd-fio-export-menu button:hover {
+  background: hsla(210, 80%, 60%, 0.25);
+}
+
+.gd-fio-export-menu .ext {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 12px;
+}

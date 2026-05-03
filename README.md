@@ -33,7 +33,8 @@ Built for editors, agencies, marketing teams, and anyone reviewing video files s
 - **Frame.io-style sorting** — Reorder Drive's comment list by Timecode, Oldest, Newest, Commenter, or filter to Completed (resolved). Same modes Frame.io reviewers expect.
 - **Hide / Show comments** — One-click toggle that closes the comments panel and expands the video player to fill the freed space (16:9, viewport-aware), then snaps back when you reopen them.
 - **Auto-reopen comment box** — After you click *Post Comment*, VidMark auto-clicks the *+ Comment* toolbar button so you can immediately type the next note without losing your place in the video.
-- **One-click export** — Download every comment with author, timestamp, and body as a clean `.txt` file, sorted by timecode, ready for handoff or pasting into your editing app.
+- **Export to nine formats** — One-click export to `.txt`, Markdown, CSV, JSON, printable HTML (save as PDF), `.srt` / `.vtt` subtitles, **`.fcpxml`** for Final Cut Pro & Adobe Premiere, and **`.edl`** for DaVinci Resolve / Avid / any NLE.
+- **Toolbar popup menu** — Click the VidMark icon in your Chrome toolbar for quick access to every export format and a Settings panel that toggles each feature on or off (synced across browsers via your Google account).
 - **Folder-view support** — Works in Drive's standalone video viewer and in the video preview opened from inside a folder.
 - **100% local** — Runs entirely in your browser on `drive.google.com` pages. No account, no server, no telemetry.
 
@@ -66,7 +67,26 @@ git clone https://github.com/markksantos/VidMark.git
 4. Type your note → **Post Comment**
 5. The next comment box opens automatically; rinse and repeat
 6. Click any colored circle on the timeline to jump to a timestamped comment
-7. Use the floating panel (top-right) to sort comments or export them as `.txt`
+7. Use the floating panel (top-right) to sort comments or export them
+8. Click the **VidMark icon** in your Chrome toolbar for the full export menu and feature toggles
+
+---
+
+## 📤 Export Formats
+
+| Format | Extension | Use case |
+|--------|-----------|----------|
+| Plain text | `.txt` | Quick handoff, email, Slack |
+| Markdown | `.md` | GitHub issues, Notion, Obsidian |
+| Spreadsheet | `.csv` | Excel, Google Sheets, sortable in any tool |
+| JSON | `.json` | Custom tooling, API integration |
+| Printable HTML | `.html` | Opens in browser → print → Save as PDF |
+| SubRip subtitles | `.srt` | Burn comments into a video as captions |
+| WebVTT subtitles | `.vtt` | HTML5 video, modern players |
+| **Final Cut Pro / Premiere** | `.fcpxml` | Imports as a project with markers at each timestamp |
+| **DaVinci Resolve / EDL** | `.edl` | CMX 3600 EDL with comment metadata — Resolve, Avid, any NLE |
+
+For the NLE formats, all comments are placed as markers at the right timecode on a synthetic track, with the author + comment body as the marker note.
 
 ---
 
@@ -113,20 +133,25 @@ Drive's video is a YouTube iframe (cross-origin) but Drive renders its own seek 
 
 ```
 VidMark/
-├── manifest.json          # MV3 manifest (name, icons, content scripts)
-├── content.js             # All behavior — runs on drive.google.com
-│   ├── 1. Auto-stamp     # insertTimestamp + live updater
-│   ├── 2. Timestamps      # wrapAllTimestamps + clickable [m:ss] links
-│   ├── 3. Markers         # timeline overlay, hue assignment, click → seek
-│   ├── 4. Sort + Export   # sort modes, export panel, .txt download
-│   ├── 5. Auto-reopen     # mutation-based detection, click + Comment
-│   └── 6. Hide / expand   # comments panel toggle + video player resize
-├── styles.css             # Markers, links, flash animation, sort layout, panel UI
-├── icon-16.png            # Toolbar icon (Chrome Web Store: required)
-├── icon-32.png            # Windows context menu (required)
-├── icon-48.png            # Extensions management page (required)
-├── icon-128.png           # Chrome Web Store listing (required)
-├── icon-source.png        # 1024×1024 master for re-export
+├── manifest.json          # MV3 manifest — content script + popup action + storage perm
+├── content.js             # All in-page behavior — runs on drive.google.com
+│   ├── Settings + storage     # chrome.storage.sync load + onChanged listener
+│   ├── 1. Auto-stamp           # insertTimestamp + live updater
+│   ├── 2. Timestamps           # wrapAllTimestamps + clickable [m:ss] links
+│   ├── 3. Markers              # timeline overlay, hue assignment, click → seek
+│   ├── 4. Sort + Export        # sort modes, 9-format export pipeline
+│   ├── 5. Auto-reopen          # mutation-based detection, click + Comment
+│   ├── 6. Hide / expand        # comments panel toggle + video player resize
+│   └── Popup messaging         # VIDMARK_EXPORT / VIDMARK_SETTINGS_CHANGED handlers
+├── styles.css             # Markers, links, flash animation, sort layout, panel + dropdown
+├── popup.html             # Toolbar popup — Export | Settings | About tabs
+├── popup.css              # Popup styling
+├── popup.js               # Popup tab nav, export dispatch, settings persistence
+├── icon-16.png            # Toolbar icon
+├── icon-32.png            # Windows context menu
+├── icon-48.png            # Extensions management page
+├── icon-128.png           # Chrome Web Store listing
+├── icon-source.png        # 1024×1024 master
 ├── store-listing.txt      # Copy-paste-ready Chrome Web Store fields
 └── README.md
 ```

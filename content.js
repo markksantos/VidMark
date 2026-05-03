@@ -9,6 +9,29 @@
 
   console.log(`${TAG} content script loaded on`, location.href);
 
+  // ---------- Settings (synced via chrome.storage.sync, defaults all true) ----------
+
+  const settings = {
+    autoStamp: true,
+    liveUpdate: true,
+    autoReopen: true,
+    showMarkers: true,
+    clickableTimestamps: true,
+    showFloatingPanel: true,
+  };
+
+  function loadSettings() {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.sync) return;
+    try {
+      chrome.storage.sync.get(Object.keys(settings), (stored) => {
+        for (const key of Object.keys(settings)) {
+          if (stored && stored[key] !== undefined) settings[key] = !!stored[key];
+        }
+      });
+    } catch (_) {}
+  }
+  loadSettings();
+
   // ---------- Time helpers ----------
 
   function fmt(seconds) {
@@ -92,6 +115,7 @@
 
   function insertTimestamp(textbox) {
     if (!textbox || textbox.dataset.gdFioStamped === '1') return;
+    if (!settings.autoStamp) return;
 
     const time = getTime();
     if (!time) {
@@ -167,6 +191,7 @@
 
   function startTimestampUpdater(textbox) {
     stopTimestampUpdater();
+    if (!settings.liveUpdate) return;
     activeUpdaterTextbox = textbox;
     activeUpdaterInterval = setInterval(() => {
       if (!textbox.isConnected) { stopTimestampUpdater(); return; }
@@ -320,6 +345,7 @@
   }
 
   function wrapAllTimestamps(durationSec) {
+    if (!settings.clickableTimestamps) return;
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode(n) {
         const v = n.nodeValue;
@@ -398,6 +424,13 @@
     if (!track || track.offsetWidth < 40) return;
 
     wrapAllTimestamps(time.durationSec);
+
+    // If markers are disabled, clear any that exist and skip the rebuild.
+    if (!settings.showMarkers) {
+      track.querySelectorAll(`.${MARKER_CLASS}`).forEach((el) => el.remove());
+      return;
+    }
+
     const index = buildStampIndex();
 
     const layer = ensureMarkerLayer(track);
@@ -620,30 +653,88 @@
     hidden.forEach((d) => { d.el.style.display = 'none'; });
   }
 
-  function exportComments() {
+  // ---------- Export pipeline ----------
+
+  function getExportContext() {
     const items = getCommentItems();
-    if (items.length === 0) {
-      alert('No comments found to export. Open Drive\'s comments panel first.');
-      return;
-    }
     const data = items.map(extractCommentMeta);
     data.sort((a, b) => {
       const sa = a.seconds === null ? Infinity : a.seconds;
       const sb = b.seconds === null ? Infinity : b.seconds;
       return sa - sb;
     });
-
-    const lines = [];
     const title = (document.title || 'Drive video').replace(/\s*-\s*Google Drive\s*$/i, '');
-    lines.push(`Comments — ${title}`);
-    lines.push(`Source: ${location.href}`);
-    lines.push(`Exported: ${new Date().toString()}`);
-    lines.push(`Count: ${data.length}`);
+    const time = getTime();
+    return {
+      title,
+      source: location.href,
+      exportedAt: new Date(),
+      durationSec: time && time.durationSec ? time.durationSec : null,
+      data,
+    };
+  }
+
+  function downloadFile(content, mimeType, filename) {
+    const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  function makeFilename(extension, ctx) {
+    const stamp = ctx.exportedAt.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const safe = (ctx.title || 'comments').replace(/[^a-z0-9-_]/gi, '_').slice(0, 40) || 'comments';
+    return `vidmark-${safe}-${stamp}.${extension}`;
+  }
+
+  function escapeXml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function fmtSrtTime(seconds) {
+    const ms = Math.round((seconds - Math.floor(seconds)) * 1000);
+    const total = Math.floor(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms, 3)}`;
+  }
+
+  function fmtVttTime(seconds) {
+    return fmtSrtTime(seconds).replace(',', '.');
+  }
+
+  function fmtEdlTime(seconds, fps) {
+    const total = Math.floor(seconds);
+    const frames = Math.min(fps - 1, Math.round((seconds - total) * fps));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}:${pad(frames)}`;
+  }
+
+  function generateTxt(ctx) {
+    const lines = [];
+    lines.push(`Comments — ${ctx.title}`);
+    lines.push(`Source: ${ctx.source}`);
+    lines.push(`Exported: ${ctx.exportedAt.toString()}`);
+    lines.push(`Count: ${ctx.data.length}`);
     lines.push('');
     lines.push('---');
     lines.push('');
-
-    for (const d of data) {
+    for (const d of ctx.data) {
       const ts = d.seconds !== null ? `[${fmt(d.seconds)}]` : '[--:--]';
       const author = d.author || 'Unknown';
       const status = d.resolved ? ' (resolved)' : '';
@@ -651,18 +742,231 @@
       lines.push(d.body ? `${ts} ${d.body}` : ts);
       lines.push('');
     }
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    a.download = `drive-comments-${stamp}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return lines.join('\n');
   }
+
+  function generateMarkdown(ctx) {
+    const lines = [];
+    lines.push(`# Comments — ${ctx.title}`);
+    lines.push('');
+    lines.push(`- **Source:** ${ctx.source}`);
+    lines.push(`- **Exported:** ${ctx.exportedAt.toLocaleString()}`);
+    lines.push(`- **Count:** ${ctx.data.length}`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    for (const d of ctx.data) {
+      const ts = d.seconds !== null ? `[${fmt(d.seconds)}]` : '[--:--]';
+      const author = d.author || 'Unknown';
+      const status = d.resolved ? ' _(resolved)_' : '';
+      lines.push(`### ${ts} — ${author}${status}`);
+      lines.push('');
+      if (d.body) lines.push(d.body);
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  function generateCsv(ctx) {
+    const escape = (v) => {
+      if (v === null || v === undefined) return '';
+      const str = String(v);
+      return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const rows = [['Timestamp', 'Seconds', 'Author', 'Comment', 'Resolved']];
+    for (const d of ctx.data) {
+      const ts = d.seconds !== null ? fmt(d.seconds) : '';
+      rows.push([ts, d.seconds == null ? '' : d.seconds, d.author || '', d.body || '', d.resolved ? 'true' : 'false']);
+    }
+    return rows.map((r) => r.map(escape).join(',')).join('\n');
+  }
+
+  function generateJson(ctx) {
+    return JSON.stringify({
+      title: ctx.title,
+      source: ctx.source,
+      exportedAt: ctx.exportedAt.toISOString(),
+      durationSec: ctx.durationSec,
+      count: ctx.data.length,
+      comments: ctx.data.map((d) => ({
+        timestamp: d.seconds !== null ? fmt(d.seconds) : null,
+        seconds: d.seconds,
+        author: d.author,
+        body: d.body,
+        resolved: d.resolved,
+      })),
+    }, null, 2);
+  }
+
+  function generateSrt(ctx) {
+    const lines = [];
+    let i = 1;
+    for (const d of ctx.data) {
+      if (d.seconds === null) continue;
+      const start = d.seconds;
+      const end = ctx.durationSec ? Math.min(start + 3, ctx.durationSec) : start + 3;
+      lines.push(String(i++));
+      lines.push(`${fmtSrtTime(start)} --> ${fmtSrtTime(end)}`);
+      lines.push(`${d.author || 'Unknown'}: ${d.body || ''}`);
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  function generateVtt(ctx) {
+    const lines = ['WEBVTT', ''];
+    for (const d of ctx.data) {
+      if (d.seconds === null) continue;
+      const start = d.seconds;
+      const end = ctx.durationSec ? Math.min(start + 3, ctx.durationSec) : start + 3;
+      lines.push(`${fmtVttTime(start)} --> ${fmtVttTime(end)}`);
+      lines.push(`${d.author || 'Unknown'}: ${d.body || ''}`);
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
+  function generateFcpxml(ctx) {
+    // Final Cut Pro X / Adobe Premiere can both import FCPXML.
+    // Markers are placed on a synthetic gap clip the same length as the source.
+    const duration = Math.ceil(ctx.durationSec || 3600);
+    const markers = ctx.data
+      .filter((d) => d.seconds !== null && d.seconds < duration)
+      .map((d) => {
+        const value = `${d.author || 'Unknown'}: ${d.body || ''}`;
+        return `        <marker start="${d.seconds}s" duration="1/30s" value="${escapeXml(value)}"${d.resolved ? ' completed="1"' : ''}/>`;
+      })
+      .join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" name="FFVideoFormat1080p2997" frameDuration="1001/30000s" width="1920" height="1080"/>
+  </resources>
+  <library>
+    <event name="VidMark — ${escapeXml(ctx.title)}">
+      <project name="${escapeXml(ctx.title)} comments">
+        <sequence format="r1" duration="${duration}s">
+          <spine>
+            <gap name="VidMark Comments" offset="0s" duration="${duration}s">
+${markers}
+            </gap>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>`;
+  }
+
+  function generateEdl(ctx) {
+    // CMX 3600 EDL with marker comments — DaVinci Resolve, Avid, and most NLEs accept this.
+    const fps = 30;
+    const safe = (ctx.title || 'VidMark').replace(/[^A-Z0-9 _-]/gi, '_').slice(0, 60).toUpperCase();
+    const lines = [];
+    lines.push(`TITLE: ${safe}`);
+    lines.push('FCM: NON-DROP FRAME');
+    lines.push('');
+    let i = 1;
+    for (const d of ctx.data) {
+      if (d.seconds === null) continue;
+      const tcIn = fmtEdlTime(d.seconds, fps);
+      const tcOut = fmtEdlTime(d.seconds + 1 / fps, fps);
+      const num = String(i).padStart(3, '0');
+      lines.push(`${num}  001      V     C        ${tcIn} ${tcOut} ${tcIn} ${tcOut}`);
+      lines.push(`* FROM CLIP NAME: ${safe}`);
+      const status = d.resolved ? ' (resolved)' : '';
+      lines.push(`* COMMENT: ${(d.author || 'Unknown')}${status}: ${(d.body || '').replace(/\r?\n/g, ' ')}`);
+      lines.push('');
+      i++;
+    }
+    return lines.join('\n');
+  }
+
+  function generateHtml(ctx) {
+    const rows = ctx.data.map((d) => {
+      const ts = d.seconds !== null ? fmt(d.seconds) : '--:--';
+      const author = d.author || 'Unknown';
+      const body = d.body || '';
+      const status = d.resolved ? '<span class="resolved">resolved</span>' : '';
+      return `      <tr>
+        <td class="ts">${ts}</td>
+        <td class="author">${escapeXml(author)} ${status}</td>
+        <td class="body">${escapeXml(body)}</td>
+      </tr>`;
+    }).join('\n');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VidMark — ${escapeXml(ctx.title)}</title>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; max-width: 900px; margin: 40px auto; padding: 0 24px; }
+  h1 { margin: 0 0 8px; font-size: 26px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 24px; }
+  .meta div { margin: 2px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 12px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid #e5e5e5; }
+  th { background: #f7f7f7; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; }
+  td.ts { font-family: 'SF Mono', Menlo, monospace; color: #1a73e8; font-weight: 500; white-space: nowrap; width: 80px; }
+  td.author { font-weight: 500; white-space: nowrap; width: 200px; }
+  .resolved { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: normal; margin-left: 4px; }
+  .print-instruction { background: #fff8e1; border-left: 4px solid #ffcc00; padding: 12px 16px; margin-bottom: 24px; border-radius: 4px; font-size: 14px; }
+  .print-instruction button { background: #1a73e8; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-left: 8px; font-size: 13px; }
+  @media print { .print-instruction { display: none; } body { margin: 0; padding: 0 16px; } }
+</style>
+</head>
+<body>
+<div class="print-instruction">
+  Use your browser's print dialog to save this as a PDF.
+  <button onclick="window.print()">Print / Save as PDF</button>
+</div>
+<h1>${escapeXml(ctx.title)}</h1>
+<div class="meta">
+  <div><strong>Source:</strong> <a href="${escapeXml(ctx.source)}">${escapeXml(ctx.source)}</a></div>
+  <div><strong>Exported:</strong> ${escapeXml(ctx.exportedAt.toLocaleString())}</div>
+  <div><strong>Comments:</strong> ${ctx.data.length}</div>
+</div>
+<table>
+  <thead><tr><th>Time</th><th>Author</th><th>Comment</th></tr></thead>
+  <tbody>
+${rows}
+  </tbody>
+</table>
+</body>
+</html>`;
+  }
+
+  function exportAs(format) {
+    const ctx = getExportContext();
+    if (ctx.data.length === 0) {
+      alert('No comments found to export. Open Drive\'s comments panel first.');
+      return;
+    }
+    switch (format) {
+      case 'txt':    return downloadFile(generateTxt(ctx),      'text/plain',          makeFilename('txt', ctx));
+      case 'md':     return downloadFile(generateMarkdown(ctx), 'text/markdown',       makeFilename('md', ctx));
+      case 'csv':    return downloadFile(generateCsv(ctx),      'text/csv',            makeFilename('csv', ctx));
+      case 'json':   return downloadFile(generateJson(ctx),     'application/json',    makeFilename('json', ctx));
+      case 'srt':    return downloadFile(generateSrt(ctx),      'application/x-subrip', makeFilename('srt', ctx));
+      case 'vtt':    return downloadFile(generateVtt(ctx),      'text/vtt',            makeFilename('vtt', ctx));
+      case 'fcpxml': return downloadFile(generateFcpxml(ctx),   'application/xml',     makeFilename('fcpxml', ctx));
+      case 'edl':    return downloadFile(generateEdl(ctx),      'text/plain',          makeFilename('edl', ctx));
+      case 'html': {
+        const blob = new Blob([generateHtml(ctx)], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return;
+      }
+      default:
+        console.warn(`${TAG} unknown export format: ${format}`);
+    }
+  }
+
+  // Backwards-compatible alias for the old "Export .txt" panel button.
+  function exportComments() { exportAs('txt'); }
 
   let commentsHidden = false;
 
@@ -733,7 +1037,23 @@
         </select>
       </div>
       <button type="button" class="gd-fio-panel-btn gd-fio-panel-btn-secondary" data-action="toggle-hide">Hide Comments</button>
-      <button type="button" class="gd-fio-panel-btn" data-action="export">Export .txt</button>
+      <div class="gd-fio-export-wrap">
+        <button type="button" class="gd-fio-panel-btn" data-action="export-toggle">Export <span class="gd-fio-caret">▾</span></button>
+        <div class="gd-fio-export-menu" data-action="export-menu" hidden>
+          <div class="gd-fio-menu-section">Document</div>
+          <button type="button" data-format="txt"><span>Plain text</span><span class="ext">.txt</span></button>
+          <button type="button" data-format="md"><span>Markdown</span><span class="ext">.md</span></button>
+          <button type="button" data-format="csv"><span>Spreadsheet</span><span class="ext">.csv</span></button>
+          <button type="button" data-format="json"><span>JSON</span><span class="ext">.json</span></button>
+          <button type="button" data-format="html"><span>Printable / PDF</span><span class="ext">.html</span></button>
+          <div class="gd-fio-menu-section">Subtitles</div>
+          <button type="button" data-format="srt"><span>SubRip</span><span class="ext">.srt</span></button>
+          <button type="button" data-format="vtt"><span>WebVTT</span><span class="ext">.vtt</span></button>
+          <div class="gd-fio-menu-section">Video editor</div>
+          <button type="button" data-format="fcpxml"><span>Final Cut / Premiere</span><span class="ext">.fcpxml</span></button>
+          <button type="button" data-format="edl"><span>DaVinci Resolve / EDL</span><span class="ext">.edl</span></button>
+        </div>
+      </div>
     `;
     document.body.appendChild(wrap);
 
@@ -748,12 +1068,32 @@
       setCommentsHidden(!commentsHidden);
     });
 
-    wrap.querySelector('[data-action="export"]').addEventListener('click', exportComments);
+    const exportToggle = wrap.querySelector('[data-action="export-toggle"]');
+    const exportMenu = wrap.querySelector('[data-action="export-menu"]');
+    exportToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportMenu.hidden = !exportMenu.hidden;
+    });
+    exportMenu.querySelectorAll('[data-format]').forEach((b) => {
+      b.addEventListener('click', () => {
+        exportAs(b.dataset.format);
+        exportMenu.hidden = true;
+      });
+    });
+    document.addEventListener('click', (e) => {
+      if (!exportMenu.hidden && !wrap.contains(e.target)) exportMenu.hidden = true;
+    });
   }
 
   function tickPanel() {
     const items = getCommentItems();
     let panel = document.getElementById('gd-fio-panel');
+
+    // If the user disabled the floating panel in settings, keep it hidden.
+    if (!settings.showFloatingPanel) {
+      if (panel) panel.style.display = 'none';
+      return;
+    }
 
     // Keep our panel visible if there are comments OR if the user has hidden
     // them (so they can click "Show Comments" to bring them back).
@@ -875,6 +1215,7 @@
   }
 
   function autoReopenAfterPost() {
+    if (!settings.autoReopen) return;
     // Small delay so Drive can fully settle (dialog dismissed, toolbar enabled).
     setTimeout(() => {
       const btn = findAddCommentButton();
@@ -993,4 +1334,45 @@
   setInterval(scheduleRender, 1500);
   window.addEventListener('resize', scheduleRender);
   setTimeout(scheduleRender, 800);
+
+  // ---------- Popup messaging ----------
+
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (!msg || typeof msg !== 'object') return false;
+
+      if (msg.type === 'VIDMARK_EXPORT') {
+        try {
+          exportAs(msg.format);
+          sendResponse({ success: true });
+        } catch (e) {
+          console.error(`${TAG} export error`, e);
+          sendResponse({ success: false, error: e && e.message ? e.message : 'Export failed' });
+        }
+        return true;
+      }
+
+      if (msg.type === 'VIDMARK_SETTINGS_CHANGED') {
+        loadSettings();
+        // Force a re-render so disabled-feature elements clean themselves up
+        // (e.g. markers vanish, ts-link spans remain but stop being added).
+        setTimeout(scheduleRender, 100);
+        sendResponse({ success: true });
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  // Live-respond to settings changes from the popup without waiting for a message.
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') return;
+      for (const key of Object.keys(changes)) {
+        if (key in settings) settings[key] = !!changes[key].newValue;
+      }
+      setTimeout(scheduleRender, 100);
+    });
+  }
 })();
