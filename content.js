@@ -1094,6 +1094,17 @@
     // our class-based rule in folder view.
     parent.style.setProperty('display', 'flex', 'important');
     parent.style.setProperty('flex-direction', 'column', 'important');
+    parent.style.setProperty('height', 'auto', 'important');
+    parent.style.setProperty('overflow-y', 'visible', 'important');
+
+    // Folder-view: ensure the dialog ancestor scrolls so comments below the
+    // viewport aren't clipped (we removed Drive's virtualized positioning,
+    // so the parent's fixed height now gates visibility).
+    const folderDialog = parent.closest('.a-b-Yk-hj');
+    if (folderDialog) {
+      folderDialog.style.setProperty('overflow-y', 'auto', 'important');
+      folderDialog.style.setProperty('height', '100%', 'important');
+    }
 
     visible.forEach((d, i) => {
       // Belt-and-suspenders: write every position-related override directly
@@ -1446,9 +1457,17 @@ ${rows}
   let commentsHidden = false;
 
   function getCommentsDialog() {
-    // First selector: standalone Drive video viewer.
-    // Second selector: video preview inside a folder.
-    return document.querySelector('.ndfHFb-c4YZDc-qwU8Me-b0t70b-haAclf, .a-b-Yk-hj');
+    // Standalone Drive video viewer.
+    const standalone = document.querySelector('.ndfHFb-c4YZDc-qwU8Me-b0t70b-haAclf');
+    if (standalone) return standalone;
+    // Folder view: there can be multiple `.a-b-Yk-hj` containers (one for the
+    // Gemini summary panel, one for actual comments). Pick the one that
+    // actually contains a [role="list"] with listitems.
+    const candidates = document.querySelectorAll('.a-b-Yk-hj');
+    for (const c of candidates) {
+      if (c.querySelector('[role="list"] [role="listitem"]')) return c;
+    }
+    return candidates[0] || null;
   }
 
   function computeExpandedPlayerVars() {

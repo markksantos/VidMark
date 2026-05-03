@@ -193,17 +193,34 @@
 /* Override Drive's absolute positioning on comment items so flex order works.
    Drive sets inline `position: absolute; top: NNNpx; left: 24px` per item; we beat
    it with !important and lay them out as a flex column instead. */
-/* Drive's comments-dialog ancestor and the wrapper between it and the list
-   have no explicit width — when we switch the list to flex, that propagates
-   "no width" down and the items collapse. Force a fixed width on the stack
-   while sort is active. Don't touch overflow — Drive's virtualization uses
-   it and stomping on it causes comments to disappear after the first paint. */
+/* Standalone viewer: Drive's comments-dialog ancestor and the wrapper between
+   it and the list have no explicit width — force one so the list doesn't
+   collapse when we switch listitems to relative positioning. */
 .ndfHFb-c4YZDc-qwU8Me-b0t70b-haAclf:has(.gd-fio-sort-active),
-.ndfHFb-c4YZDc-qwU8Me-b0t70b-haAclf:has(.gd-fio-sort-active) > .ndfHFb-c4YZDc-wvGCSb-gkA7Yd,
-.a-b-Yk-hj:has(.gd-fio-sort-active),
-.a-b-Yk-hj:has(.gd-fio-sort-active) > * {
+.ndfHFb-c4YZDc-qwU8Me-b0t70b-haAclf:has(.gd-fio-sort-active) > .ndfHFb-c4YZDc-wvGCSb-gkA7Yd {
   width: 320px !important;
   min-width: 320px !important;
+  box-sizing: border-box !important;
+}
+
+/* Folder-view comments dialog: parent already has a max-width constraint
+   (282-300px) so don't force a fixed pixel width — let the dialog and list
+   fill the space their parent allows, and make the list scroll if its
+   content grows past the parent's height (otherwise comments at the bottom
+   get clipped because Drive's virtualization is no longer driving the
+   scroll position). */
+.a-b-Yk-hj:has(.gd-fio-sort-active) {
+  width: 100% !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+}
+
+.a-b-Yk-hj:has(.gd-fio-sort-active) > .gd-fio-sort-active {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: visible !important;
   box-sizing: border-box !important;
 }
 
