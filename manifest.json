@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Video Timestamps for Google Drive — Comments & Review",
+  "short_name": "VidMark",
+  "version": "1.0.0",
+  "description": "Frame.io-style timestamped comments for Google Drive video review. Auto-stamps time, clickable timeline markers, sort & export.",
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://drive.google.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

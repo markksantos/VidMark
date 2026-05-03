@@ -1,0 +1,156 @@
+<div align="center">
+
+# 🎬 VidMark
+
+<img src="icon-128.png" width="128" alt="VidMark icon" />
+
+**Frame.io-style timestamped comments for Google Drive video review.**
+
+[![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](#)
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](#)
+[![Manifest V3](https://img.shields.io/badge/Manifest-V3-2C5CFF?style=for-the-badge)](#)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](#)
+
+[Features](#-features) · [Getting Started](#-getting-started) · [How It Works](#-how-it-works) · [Tech Stack](#️-tech-stack) · [Project Structure](#-project-structure)
+
+</div>
+
+---
+
+VidMark turns the Google Drive video player into a real video-review tool. Open a comment while paused and the current timestamp is auto-stamped at the start. Each timestamped comment drops a clickable color-coded circle on the timeline. Click a marker to jump the video and flash the matching comment. Sort comments by timecode, commenter, or completion. Export the whole feedback session to a clean text file with one click.
+
+Built for editors, agencies, marketing teams, and anyone reviewing video files shared over Drive — without paying for, syncing to, or uploading to Frame.io.
+
+---
+
+## ✨ Features
+
+- **Auto-timestamp every comment** — Click *Comment* while paused at any frame and the current video time is inserted as `[m:ss]` at the start of your reply. No more typing timecodes by hand.
+- **Live-updating timestamp** — While the comment box is empty, the inserted timestamp tracks your scrubs in real time. The moment you start typing past it, the timestamp locks in.
+- **Color-coded timeline markers** — Every timestamped comment drops a clickable circle on the seek bar, each in its own pastel hue (golden-ratio distributed) so adjacent comments stay visually distinct.
+- **Click a marker to jump and highlight** — Click any timeline circle and the video seeks to that moment while the matching comment flashes in the same color and scrolls into view.
+- **Clickable `[m:ss]` inside comments** — Every timestamp inside every comment becomes a blue underlined link that seeks the video when clicked.
+- **Frame.io-style sorting** — Reorder Drive's comment list by Timecode, Oldest, Newest, Commenter, or filter to Completed (resolved). Same modes Frame.io reviewers expect.
+- **Hide / Show comments** — One-click toggle that closes the comments panel and expands the video player to fill the freed space (16:9, viewport-aware), then snaps back when you reopen them.
+- **Auto-reopen comment box** — After you click *Post Comment*, VidMark auto-clicks the *+ Comment* toolbar button so you can immediately type the next note without losing your place in the video.
+- **One-click export** — Download every comment with author, timestamp, and body as a clean `.txt` file, sorted by timecode, ready for handoff or pasting into your editing app.
+- **Folder-view support** — Works in Drive's standalone video viewer and in the video preview opened from inside a folder.
+- **100% local** — Runs entirely in your browser on `drive.google.com` pages. No account, no server, no telemetry.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Google Chrome 110+ or any Chromium-based browser (Edge, Brave, Arc, etc.)
+- Access to videos in Google Drive
+
+### Install (developer mode)
+
+```bash
+git clone https://github.com/markksantos/VidMark.git
+```
+
+1. Open `chrome://extensions` in Chrome
+2. Toggle **Developer mode** (top-right)
+3. Click **Load unpacked**
+4. Select the cloned `VidMark` folder
+5. Open any video in Google Drive — VidMark is now active
+
+### Usage
+
+1. Open a video in Google Drive
+2. Pause where you want to leave a note, click **Comment**
+3. The comment box pre-fills with `[1:45]` (or wherever you're paused)
+4. Type your note → **Post Comment**
+5. The next comment box opens automatically; rinse and repeat
+6. Click any colored circle on the timeline to jump to a timestamped comment
+7. Use the floating panel (top-right) to sort comments or export them as `.txt`
+
+---
+
+## 🔧 How It Works
+
+```
+You pause the video at 3:25
+  -> Click "Comment"
+  -> VidMark reads the seek-slider's value/aria-valuetext
+  -> Inserts "[3:25] " into Drive's contenteditable comment editor
+  -> You type your note and post
+  -> VidMark detects the new comment in the [role="list"], clicks "+ Comment"
+  -> Cycle repeats
+
+Existing comments
+  -> VidMark walks text nodes for [m:ss] patterns (idempotent, skips contenteditable)
+  -> Wraps each match in a clickable span with a stable hue derived from seconds
+  -> Overlays a circle on the seek bar at (seconds / duration) * 100%
+  -> Click marker  ->  set slider.value via native setter, dispatch input/change
+                    ->  Drive seeks the underlying YouTube iframe
+                    ->  the matching comment card flashes in the same hue
+```
+
+Drive's video is a YouTube iframe (cross-origin) but Drive renders its own seek slider in the parent frame. VidMark reads time from `<input aria-label="Seek slider">` and seeks by setting that input's value via the native setter plus dispatching `input`/`change` events — Drive's own jsaction handlers then proxy the seek to the iframe.
+
+---
+
+## 🛠️ Tech Stack
+
+| Category | Technology |
+|----------|-----------|
+| Type | Chrome Extension (Manifest V3) |
+| Language | Vanilla JavaScript — no build step |
+| Architecture | Content script + injected stylesheet |
+| Time source | Drive's seek-slider (`<input aria-label="Seek slider">`) |
+| DOM detection | `MutationObserver` + `focusin` + safety-net polling |
+| Comment editor | `document.execCommand('insertText')` + synthetic paste fallback |
+| Layout overrides | CSS `:has()` + custom properties (`--gd-fio-h`, `--gd-fio-player-*`) |
+| Dependencies | **Zero** — no npm, no bundler, no frameworks |
+
+---
+
+## 📁 Project Structure
+
+```
+VidMark/
+├── manifest.json          # MV3 manifest (name, icons, content scripts)
+├── content.js             # All behavior — runs on drive.google.com
+│   ├── 1. Auto-stamp     # insertTimestamp + live updater
+│   ├── 2. Timestamps      # wrapAllTimestamps + clickable [m:ss] links
+│   ├── 3. Markers         # timeline overlay, hue assignment, click → seek
+│   ├── 4. Sort + Export   # sort modes, export panel, .txt download
+│   ├── 5. Auto-reopen     # mutation-based detection, click + Comment
+│   └── 6. Hide / expand   # comments panel toggle + video player resize
+├── styles.css             # Markers, links, flash animation, sort layout, panel UI
+├── icon-16.png            # Toolbar icon (Chrome Web Store: required)
+├── icon-32.png            # Windows context menu (required)
+├── icon-48.png            # Extensions management page (required)
+├── icon-128.png           # Chrome Web Store listing (required)
+├── icon-source.png        # 1024×1024 master for re-export
+├── store-listing.txt      # Copy-paste-ready Chrome Web Store fields
+└── README.md
+```
+
+---
+
+## 🔐 Privacy
+
+- VidMark runs entirely in your browser on `https://drive.google.com/*` and never on any other site
+- It does not collect, transmit, sell, or share any data
+- It does not require an account, log-in, or external server — no background service worker
+- It does not read or modify videos themselves; only the comment text and timeline UI inside Drive
+- Permissions: content script injection on `drive.google.com` only — nothing else
+
+---
+
+## 📄 License
+
+MIT License © 2026 Mark Santos
+
+---
+
+<div align="center">
+
+Built by [Mark Santos](https://github.com/markksantos) · Replace Frame.io with the Drive you already pay for.
+
+</div>

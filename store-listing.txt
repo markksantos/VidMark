@@ -1,0 +1,157 @@
+═══════════════════════════════════════════════════════════════
+CHROME WEB STORE LISTING — copy/paste straight into the form
+═══════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────
+NAME (max 75 chars)
+────────────────────────────────────────────────────────────────
+Video Timestamps for Google Drive — Comments & Review
+
+────────────────────────────────────────────────────────────────
+SUMMARY (max 132 chars — shown in search results, critical for CTR)
+────────────────────────────────────────────────────────────────
+Add Frame.io-style timestamped comments to Google Drive videos. Auto-stamp current time, clickable timeline markers, export.
+
+────────────────────────────────────────────────────────────────
+CATEGORY
+────────────────────────────────────────────────────────────────
+Workflow & Planning  (alt: Productivity)
+
+────────────────────────────────────────────────────────────────
+LANGUAGE
+────────────────────────────────────────────────────────────────
+English (United States)
+
+────────────────────────────────────────────────────────────────
+DESCRIPTION (max 16,000 chars — keyword-rich, scannable)
+────────────────────────────────────────────────────────────────
+
+Turn Google Drive into a real video review tool. This extension adds Frame.io-style timestamped comments to any video you watch in Google Drive — perfect for editors, agencies, marketing teams, course creators, and anyone reviewing video files shared over Drive.
+
+WHAT IT DOES
+============
+
+• Auto-timestamp every comment. Click "Comment" while paused at any frame and the current video time is automatically inserted as [m:ss] at the start of your reply. No more typing timecodes by hand.
+
+• Color-coded markers on the video timeline. Every timestamped comment drops a clickable circle on the seek bar, each in its own pastel color so you can tell them apart at a glance.
+
+• Click a marker to jump and highlight. Click any timeline circle and the video seeks to that moment while the matching comment flashes in the same color — instant visual link between timeline and feedback.
+
+• Click any [m:ss] inside a comment to jump. Every timestamp in every comment becomes a clickable blue link that seeks the video.
+
+• Sort comments like a pro. Reorder Drive's comment list by Timecode, Oldest, Newest, Commenter, or filter to Completed (resolved) — the same sort modes Frame.io reviewers expect.
+
+• One-click export to .txt. Download every comment with author, timestamp, and body as a clean text file for handoff, archiving, or pasting into your editing app.
+
+WHO IT'S FOR
+============
+
+✓ Video editors collecting client feedback on rough cuts shared via Drive
+✓ Agencies reviewing creative deliverables without paying for Frame.io seats
+✓ Marketing teams approving social cuts, ads, and product videos
+✓ Course creators and YouTubers reviewing edits with collaborators
+✓ Filmmakers and producers running notes sessions on dailies
+✓ Sales and customer success reviewing call recordings stored in Drive
+✓ Anyone who's tired of writing "at 1:23, the audio cuts out" by hand
+
+WHY DRIVE INSTEAD OF FRAME.IO
+=============================
+
+You probably already keep your video files in Google Drive. You already share them with clients in Drive. Drive's comment system already exists — it just doesn't know what timestamps are. This extension adds the missing piece so you don't pay for, upload to, or sync with a separate review platform.
+
+PRIVACY
+=======
+
+This extension runs entirely in your browser on drive.google.com pages only. It does not collect, transmit, sell, or share any data. It does not require an account, log-in, or external server. It does not read or modify videos themselves — only the comment text and timeline UI inside Drive.
+
+HOW IT WORKS (UNDER THE HOOD)
+=============================
+
+The extension watches for Drive's video player and the comment editor. When you open a comment box, it reads the player's current time from the seek slider and inserts a [m:ss] timestamp. It scans existing comments for [m:ss] patterns and overlays clickable markers on the seek bar. Each timestamp is assigned a stable hue using golden-ratio distribution so colors stay distinct. Sort uses CSS layout overrides on Drive's comment list — non-destructive, framework-safe.
+
+KEYBOARD-FRIENDLY
+=================
+
+Drive's existing keyboard shortcuts (k = play/pause, j/l = seek 10s, m = mute, f = fullscreen, c = captions) all keep working. Pause where you want, click Comment, type your note — the timestamp is already there.
+
+FEEDBACK & SUPPORT
+==================
+
+Found a bug or want a feature? Reach out — the extension is actively maintained and updated as Google Drive's interface evolves.
+
+────────────────────────────────────────────────────────────────
+KEYWORDS / TAGS (use these phrases naturally in description above
+and in your screenshots; they're already woven in)
+────────────────────────────────────────────────────────────────
+
+Primary search intents:
+- google drive video comments
+- video timestamps google drive
+- frame.io alternative
+- timestamp comments video
+- google drive video review
+- video review extension
+- timecode comments
+
+Secondary:
+- video feedback tool
+- client video review
+- video annotation google drive
+- drive video editor feedback
+- review video without frame.io
+
+────────────────────────────────────────────────────────────────
+SCREENSHOTS (1280x800 or 640x400, need at least 1, max 5)
+────────────────────────────────────────────────────────────────
+
+Recommended set in order:
+1. Hero shot — Drive video paused mid-frame with the comment popup open
+   pre-filled with [3:25], colored markers visible on the timeline.
+2. Timeline detail — close-up of the seek bar with 4-5 colored markers,
+   one being clicked, comment flashing on the right.
+3. Sort dropdown open — show the five sort modes (Timecode/Oldest/Newest/
+   Commenter/Completed) with the comments list visibly reordered.
+4. Export button + the resulting .txt file shown side-by-side.
+5. Clickable [m:ss] inside a comment with cursor hovering — seek in action.
+
+Add a 1-line caption baked into each screenshot:
+1. "Auto-timestamp every comment, no typing timecodes"
+2. "Click any marker to jump and highlight"
+3. "Sort by timecode, oldest, newest, commenter, or completed"
+4. "One-click export to .txt for handoff"
+5. "Click any [time] in a comment to seek the video"
+
+────────────────────────────────────────────────────────────────
+PROMOTIONAL TILE (optional but boosts placement)
+────────────────────────────────────────────────────────────────
+
+Small promo tile (440x280):
+- Left half: the icon, large
+- Right half: bold text "Video Timestamps / for Google Drive"
+- Subtitle: "Frame.io-style review, built into Drive"
+
+Marquee tile (1400x560, only if featured):
+- Full bleed pastel cream background
+- Mock Drive video with colored timeline markers
+- Headline: "Review videos in Google Drive without leaving Google Drive"
+
+────────────────────────────────────────────────────────────────
+SINGLE-PURPOSE DESCRIPTION (required by Chrome review team)
+────────────────────────────────────────────────────────────────
+
+This extension has one purpose: enabling timestamp-based video review
+inside the Google Drive video player. All features (auto-timestamp on
+comment, timeline markers, comment sorting, export) directly support
+that single purpose.
+
+────────────────────────────────────────────────────────────────
+PERMISSIONS JUSTIFICATION (required for review)
+────────────────────────────────────────────────────────────────
+
+host_permissions / matches: https://drive.google.com/*
+  Required to read the Drive video player's seek slider value, detect
+  the comment textbox, and inject timeline markers. The extension does
+  not run on any other site.
+
+(No additional permissions are requested — no storage, tabs, scripting,
+identity, or remote code. No background service worker.)
