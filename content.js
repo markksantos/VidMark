@@ -1090,16 +1090,28 @@
       visible = onlyResolved.sort((a, b) => a.origIdx - b.origIdx);
     }
 
-    visible.forEach((d, i) => {
-      d.el.style.order = String(i + 1);
-      d.el.style.display = '';
-    });
-    hidden.forEach((d) => { d.el.style.display = 'none'; });
+    // Force-flex the parent inline too, in case Drive's CSS specificity beats
+    // our class-based rule in folder view.
+    parent.style.setProperty('display', 'flex', 'important');
+    parent.style.setProperty('flex-direction', 'column', 'important');
 
-    // Defensive: also physically reorder the listitems in the DOM. Drive's
-    // folder-view preview sometimes keeps absolute positioning that we can't
-    // fully override with CSS, so flex `order` alone has no visible effect.
-    // Appending each in sort order moves them visually regardless of layout.
+    visible.forEach((d, i) => {
+      // Belt-and-suspenders: write every position-related override directly
+      // on the element with !important so it sticks even if the CSS class
+      // selector doesn't match the listitem (e.g. listitems aren't direct
+      // children in folder view).
+      d.el.style.setProperty('order', String(i + 1), 'important');
+      d.el.style.setProperty('position', 'relative', 'important');
+      d.el.style.setProperty('top', 'auto', 'important');
+      d.el.style.setProperty('left', 'auto', 'important');
+      d.el.style.setProperty('right', 'auto', 'important');
+      d.el.style.setProperty('bottom', 'auto', 'important');
+      d.el.style.removeProperty('display');
+    });
+    hidden.forEach((d) => { d.el.style.setProperty('display', 'none', 'important'); });
+
+    // Physical DOM reorder as a final fallback for any layout where flex
+    // `order` is ignored.
     try {
       for (const d of visible) {
         if (d.el.parentElement === parent) parent.appendChild(d.el);

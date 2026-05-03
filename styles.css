@@ -216,7 +216,7 @@
   box-sizing: border-box !important;
 }
 
-.gd-fio-sort-active > [role="listitem"] {
+.gd-fio-sort-active [role="listitem"] {
   position: relative !important;
   top: auto !important;
   left: auto !important;
@@ -232,21 +232,21 @@
 }
 
 /* The inner card chain — make every wrapper fill the listitem. */
-.gd-fio-sort-active > [role="listitem"] .wvGCSb-efwuC-k4Qmrd,
-.gd-fio-sort-active > [role="listitem"] .wvGCSb-efwuC-bN97Pc,
-.gd-fio-sort-active > [role="listitem"] .wvGCSb-pnL5fc-C58Yv,
-.gd-fio-sort-active > [role="listitem"] .wvGCSb-eKrold,
-.gd-fio-sort-active > [role="listitem"] .Yk-efwuC-Al,
-.gd-fio-sort-active > [role="listitem"] .Yk-efwuC-x,
-.gd-fio-sort-active > [role="listitem"] .Yk-pnL5fc-C58Yv,
-.gd-fio-sort-active > [role="listitem"] .Yk-eKrold {
+.gd-fio-sort-active [role="listitem"] .wvGCSb-efwuC-k4Qmrd,
+.gd-fio-sort-active [role="listitem"] .wvGCSb-efwuC-bN97Pc,
+.gd-fio-sort-active [role="listitem"] .wvGCSb-pnL5fc-C58Yv,
+.gd-fio-sort-active [role="listitem"] .wvGCSb-eKrold,
+.gd-fio-sort-active [role="listitem"] .Yk-efwuC-Al,
+.gd-fio-sort-active [role="listitem"] .Yk-efwuC-x,
+.gd-fio-sort-active [role="listitem"] .Yk-pnL5fc-C58Yv,
+.gd-fio-sort-active [role="listitem"] .Yk-eKrold {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
 }
 
 /* Hide all comment listitems when the user toggles "Hide Comments". */
-.gd-fio-comments-hidden > [role="listitem"] {
+.gd-fio-comments-hidden [role="listitem"] {
   display: none !important;
 }
 
